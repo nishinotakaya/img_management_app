@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>画像アップロードシステム</title>
+    <style>
+      /* 基本スタイル */
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #d35400;
+        color: white;
+        padding: 15px 20px;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: bold;
+      }
+      .nav-links {
+        display: flex;
+        gap: 15px;
+      }
+      .nav-links a {
+        color: white;
+        text-decoration: none;
+        font-size: 18px;
+      }
+
+      /* メインレイアウト：左にフォルダー、右にコンテンツ */
+      .main-container {
+        display: flex;
+      }
+      .folder-sidebar {
+        width: 220px;
+        border-right: 1px solid #ccc;
+        padding: 10px;
+      }
+      /* 「新規フォルダー作成」ボタン */
+      .folder-sidebar button {
+        width: 100%;
+        padding: 8px;
+        margin-bottom: 10px;
+        background-color: #d35400;
+        color: white;
+        border: none;
+        cursor: pointer;
+      }
+      /* フォルダー項目 */
+      .folder-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 5px;
+        cursor: pointer;
+        border-bottom: 1px solid #eee;
+      }
+      .folder-item.active {
+        background-color: #f0f0f0;
+      }
+      .folder-item span.folder-name {
+        flex: 1;
+      }
+      .folder-item button {
+        margin-left: 5px;
+        padding: 2px 5px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      /* 右側コンテンツ */
+      .content {
+        flex: 1;
+        padding: 20px;
+      }
+      .section-title {
+        font-size: 22px;
+        font-weight: bold;
+        margin-bottom: 20px;
+        position: relative;
+        padding-bottom: 10px;
+      }
+      .section-title::after {
+        content: "";
+        display: block;
+        width: 100%;
+        height: 4px;
+        background-color: #d35400;
+        position: absolute;
+        left: 0;
+        bottom: 0;
+      }
+      .upload-container {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      .drop-zone {
+        border: 2px dashed #d35400;
+        padding: 20px;
+        text-align: center;
+        cursor: pointer;
+      }
+      .image-container {
+        display: flex;
+        justify-content: flex-start;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .image-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+      }
+      .image-item img {
+        width: 200px;
+        height: 200px;
+        object-fit: cover;
+      }
+      .image-item input {
+        text-align: center;
+        padding: 5px;
+      }
+      .delete-btn {
+        background-color: red;
+        color: white;
+        border: none;
+        padding: 5px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ヘッダー -->
+    <header class="header">
+      <h1>画像アップロードシステム</h1>
+      <nav class="nav-links">
+        <a href="#">画像一覧</a>
+        <a href="#">ログイン</a>
+      </nav>
+    </header>
+
+    <!-- メイン領域（左：フォルダー、右：画像アップロード・表示） -->
+    <div class="main-container">
+      <!-- フォルダーサイドバー -->
+      <aside class="folder-sidebar">
+        <button id="createFolderBtn">新規フォルダー作成</button>
+        <div id="folderList"></div>
+      </aside>
+
+      <!-- コンテンツ領域 -->
+      <div class="content">
+        <h2 class="section-title">画像一覧</h2>
+        <div class="upload-container">
+          <input type="file" id="fileInput" accept="image/*" multiple />
+          <div class="drop-zone" id="dropZone">ここに画像をドラッグ＆ドロップ</div>
+        </div>
+        <div class="image-container" id="imageContainer"></div>
+      </div>
+    </div>
+
+    <script>
+      /***********************
+       * フォルダー＆画像管理 *
+       ***********************/
+      // フォルダー情報を localStorage に保存するキーは "folders"
+      // 各フォルダーオブジェクト例： { id: 12345, name: "フォルダー名", images: [ { src:"...", name:"" }, ... ] }
+      let folders = JSON.parse(localStorage.getItem("folders")) || [];
+      let activeFolderId = localStorage.getItem("activeFolderId") || null;
+
+      // 各DOM要素の取得
+      const folderList = document.getElementById("folderList");
+      const imageContainer = document.getElementById("imageContainer");
+      const fileInput = document.getElementById("fileInput");
+      const dropZone = document.getElementById("dropZone");
+      const createFolderBtn = document.getElementById("createFolderBtn");
+
+      // localStorage へ保存
+      function saveFolders() {
+        localStorage.setItem("folders", JSON.stringify(folders));
+        localStorage.setItem("activeFolderId", activeFolderId);
+      }
+
+      // 初回起動時にフォルダーがなければ「デフォルトフォルダー」を作成
+      function initFolders() {
+        if (folders.length === 0) {
+          const defaultFolder = {
+            id: Date.now(),
+            name: "デフォルトフォルダー",
+            images: []
+          };
+          folders.push(defaultFolder);
+          activeFolderId = defaultFolder.id;
+          saveFolders();
+        } else if (!activeFolderId) {
+          activeFolderId = folders[0].id;
+          saveFolders();
+        }
+      }
+
+      // フォルダー一覧の表示
+      function displayFolders() {
+        folderList.innerHTML = "";
+        folders.forEach(folder => {
+          const folderItem = document.createElement("div");
+          folderItem.classList.add("folder-item");
+          if (folder.id == activeFolderId) {
+            folderItem.classList.add("active");
+          }
+          folderItem.dataset.id = folder.id;
+
+          // フォルダー名表示
+          const folderNameSpan = document.createElement("span");
+          folderNameSpan.classList.add("folder-name");
+          folderNameSpan.textContent = folder.name;
+
+          // クリックでそのフォルダーを選択
+          folderItem.addEventListener("click", () => {
+            activeFolderId = folder.id;
+            saveFolders();
+            displayFolders();
+            displayImages();
+          });
+
+          // フォルダー名編集ボタン
+          const editBtn = document.createElement("button");
+          editBtn.textContent = "編集";
+          editBtn.addEventListener("click", e => {
+            e.stopPropagation(); // クリックイベントがフォルダー選択に伝播しないように
+            const input = document.createElement("input");
+            input.type = "text";
+            input.value = folder.name;
+            input.style.width = "100px";
+            input.addEventListener("blur", () => {
+              folder.name = input.value || "無題フォルダー";
+              saveFolders();
+              displayFolders();
+            });
+            folderItem.replaceChild(input, folderNameSpan);
+            input.focus();
+          });
+
+          // フォルダー削除ボタン
+          const deleteBtn = document.createElement("button");
+          deleteBtn.textContent = "削除";
+          deleteBtn.addEventListener("click", e => {
+            e.stopPropagation();
+            if (confirm("このフォルダーを削除しますか？")) {
+              folders = folders.filter(f => f.id != folder.id);
+              if (activeFolderId == folder.id) {
+                activeFolderId = folders.length > 0 ? folders[0].id : null;
+              }
+              saveFolders();
+              displayFolders();
+              displayImages();
+            }
+          });
+
+          // フォルダー項目に要素をまとめる
+          const actionsContainer = document.createElement("span");
+          actionsContainer.appendChild(editBtn);
+          actionsContainer.appendChild(deleteBtn);
+
+          folderItem.appendChild(folderNameSpan);
+          folderItem.appendChild(actionsContainer);
+          folderList.appendChild(folderItem);
+        });
+      }
+
+      // 選択中フォルダーの画像表示
+      function displayImages() {
+        imageContainer.innerHTML = "";
+        const activeFolder = folders.find(folder => folder.id == activeFolderId);
+        if (activeFolder) {
+          activeFolder.images.forEach((image, index) => {
+            const imageItem = document.createElement("div");
+            imageItem.classList.add("image-item");
+
+            const img = document.createElement("img");
+            img.src = image.src;
+
+            // 画像名の編集
+            const nameInput = document.createElement("input");
+            nameInput.type = "text";
+            nameInput.value = image.name;
+            nameInput.placeholder = "画像名を入力";
+            nameInput.addEventListener("input", () => {
+              activeFolder.images[index].name = nameInput.value;
+              saveFolders();
+            });
+
+            // 画像削除ボタン
+            const deleteButton = document.createElement("button");
+            deleteButton.textContent = "削除";
+            deleteButton.classList.add("delete-btn");
+            deleteButton.addEventListener("click", () => {
+              if (confirm("この画像を削除しますか？")) {
+                activeFolder.images.splice(index, 1);
+                saveFolders();
+                displayImages();
+              }
+            });
+
+            imageItem.appendChild(img);
+            imageItem.appendChild(nameInput);
+            imageItem.appendChild(deleteButton);
+            imageContainer.appendChild(imageItem);
+          });
+        } else {
+          imageContainer.textContent = "フォルダーが選択されていません。";
+        }
+      }
+
+      // 画像ファイルを読み込み、現在選択中のフォルダーへ追加
+      function saveImage(file) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const activeFolder = folders.find(folder => folder.id == activeFolderId);
+          if (activeFolder) {
+            activeFolder.images.push({ src: e.target.result, name: "" });
+            saveFolders();
+            displayImages();
+          } else {
+            alert("フォルダーが選択されていません。");
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+
+      /***********************
+       * イベントリスナー設定 *
+       ***********************/
+      // ファイル選択時
+      fileInput.addEventListener("change", event => {
+        Array.from(event.target.files).forEach(file => {
+          saveImage(file);
+        });
+      });
+
+      // ドラッグ＆ドロップ時
+      dropZone.addEventListener("dragover", event => {
+        event.preventDefault();
+      });
+      dropZone.addEventListener("drop", event => {
+        event.preventDefault();
+        Array.from(event.dataTransfer.files).forEach(file => {
+          saveImage(file);
+        });
+      });
+
+      // 「新規フォルダー作成」ボタン
+      createFolderBtn.addEventListener("click", () => {
+        const newFolder = {
+          id: Date.now(),
+          name: "新規フォルダー",
+          images: []
+        };
+        folders.push(newFolder);
+        activeFolderId = newFolder.id;
+        saveFolders();
+        displayFolders();
+        displayImages();
+      });
+
+      // 初期化処理
+      initFolders();
+      displayFolders();
+      displayImages();
+    </script>
+  </body>
+</html>
